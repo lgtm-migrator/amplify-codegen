@@ -93,15 +93,53 @@ export class AppSyncSwiftVisitor<
         const fieldType = this.getNativeType(field);
         const isVariable = !primaryKeyComponentFieldsName.includes(field.name);
         const listType: ListType = field.connectionInfo ? ListType.LIST : ListType.ARRAY;
-        structBlock.addProperty(this.getFieldName(field), fieldType, undefined, 'public', {
-          optional: !this.isFieldRequired(field),
-          isList: field.isList,
-          variable: isVariable,
-          isEnum: this.isEnumType(field),
-          listType: field.isList ? listType : undefined,
-          isListNullable: field.isListNullable,
-          handleListNullabilityTransparently: this.isHasManyConnectionField(field) ? false : this.config.handleListNullabilityTransparently,
-        });
+        const connectionHasOneOrBelongsTo: boolean = field.connectionInfo
+          ? field.connectionInfo.kind === CodeGenConnectionType.HAS_ONE || field.connectionInfo.kind === CodeGenConnectionType.BELONGS_TO
+          : false;
+        if (connectionHasOneOrBelongsTo) {
+          structBlock.addProperty(`_${this.getFieldName(field)}`, `LazyModel<${fieldType}>`, undefined, `internal`, {
+            optional: false,
+            isList: field.isList,
+            variable: isVariable,
+            isEnum: this.isEnumType(field),
+            listType: field.isList ? listType : undefined,
+            isListNullable: field.isListNullable,
+            handleListNullabilityTransparently: this.isHasManyConnectionField(field)
+              ? false
+              : this.config.handleListNullabilityTransparently,
+          });
+          structBlock.addProperty(
+            this.getFieldName(field),
+            fieldType,
+            undefined,
+            'public',
+            {
+              optional: !this.isFieldRequired(field),
+              isList: field.isList,
+              variable: isVariable,
+              isEnum: this.isEnumType(field),
+              listType: field.isList ? listType : undefined,
+              isListNullable: field.isListNullable,
+              handleListNullabilityTransparently: this.isHasManyConnectionField(field)
+                ? false
+                : this.config.handleListNullabilityTransparently,
+            },
+            undefined,
+            `get async throws { \n  try await _${this.getFieldName(field)}.get()\n}`,
+          );
+        } else {
+          structBlock.addProperty(this.getFieldName(field), fieldType, undefined, 'public', {
+            optional: !this.isFieldRequired(field),
+            isList: field.isList,
+            variable: isVariable,
+            isEnum: this.isEnumType(field),
+            listType: field.isList ? listType : undefined,
+            isListNullable: field.isListNullable,
+            handleListNullabilityTransparently: this.isHasManyConnectionField(field)
+              ? false
+              : this.config.handleListNullabilityTransparently,
+          });
+        }
       });
       const initParams: CodeGenField[] = this.getWritableFields(obj);
       const initImpl: string = `self.init(${indentMultiline(
